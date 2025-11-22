@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.oceanbase.odc.core.sql.split.SqlSplitterIteratorTest
+-------------------------------------------------------------------------------
+Tests run: 40, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.847 sec

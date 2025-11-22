@@ -1,0 +1,8 @@
+com/oceanbase/odc/test/dataloader/DataLoaders$TestData.class
+com/oceanbase/odc/test/dataloader/DataLoaders.class
+com/oceanbase/odc/core/sql/split/AbstractSqlSplitterTest.class
+com/oceanbase/odc/core/sql/split/OBOracleSqlSplitterTest.class
+com/oceanbase/odc/core/sql/split/SqlCommentProcessorTest.class
+com/oceanbase/odc/test/dataloader/DataLoaders$YamlDataLoader.class
+com/oceanbase/odc/core/sql/split/OracleSqlSplitterTest.class
+com/oceanbase/odc/core/sql/split/SqlSplitterIteratorTest.class
