@@ -112,6 +112,11 @@ class OracleLexerDefinition implements LexerTokenDefinition {
     }
 
     @Override
+    public int ALTER() {
+        return PlSqlLexer.ALTER;
+    }
+
+    @Override
     public int BODY() {
         return PlSqlLexer.BODY;
     }
@@ -144,6 +149,11 @@ class OracleLexerDefinition implements LexerTokenDefinition {
     @Override
     public int IF() {
         return PlSqlLexer.IF;
+    }
+
+    @Override
+    public int REPEAT() {
+        return Token.MIN_USER_TOKEN_TYPE;
     }
 
     @Override

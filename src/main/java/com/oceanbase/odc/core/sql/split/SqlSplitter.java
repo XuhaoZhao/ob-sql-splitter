@@ -31,8 +31,11 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Stack;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonToken;
@@ -64,6 +67,8 @@ public class SqlSplitter {
     private static final int MAX_PL_PATTEN_TYPE_SIZE = 3;
     private static final String DEFAULT_SQL_DELIMITER = ";";
     private static final char[] SPACES_CHARS = "\r\n\t ".toCharArray();
+    private static final Pattern DB2_TERMINATOR_PATTERN =
+            Pattern.compile("--\\s*#SET\\s+TERMINATOR\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE);
     private final LexerTokenDefinition tokenDefinition;
     private final LexerFactory lexerFactory;
     private final InnerUtils innerUtils;
@@ -112,6 +117,8 @@ public class SqlSplitter {
     private final List<OffsetString> stmts = new ArrayList<>();
 
     private final boolean addDelimiter;
+    private final boolean db2Mode;
+
 
     /**
      * 当前语句状态，初始为 SQL_STMT，进去 PL BLock 后切换到 PL_STMT 状态
@@ -172,9 +179,11 @@ public class SqlSplitter {
         this.innerUtils = new InnerUtils();
         this.delimiter = delimiter;
         this.addDelimiter = addDelimiter;
+        this.db2Mode = DB2zSQLLexer.class == lexerType;
+
 
         LexerTokenDefinition definition = this.tokenDefinition;
-        this.DEFAULT_PL_END_DELIMITER = definition.DIV();
+        this.DEFAULT_PL_END_DELIMITER = this.db2Mode ? definition.SEMICOLON() : definition.DIV();
         this.SQL_DELIMITER = definition.SEMICOLON();
         this.PL_ELSE = definition.ELSE();
         this.PL_THEN = definition.THEN();
@@ -203,36 +212,48 @@ public class SqlSplitter {
         int[] CASE_START = new int[] {definition.CASE()};
         int[] WHILE_START = new int[] {definition.WHILE()};
 
-        this.ALL_PL_START_PATTERNS = new int[][] {ANONYMOUS_BLOCK_DECLARE_START, ANONYMOUS_BLOCK_BEGIN_START,
-                CREATE_FUNCTION_START, CREATE_PROCEDURE_START, CREATE_TRIGGER_START, CREATE_PACKAGE_START,
-                CREATE_PACKAGE_BODY_START, CREATE_TYPE_START, CREATE_TYPE_BODY_START,
-                FUNCTION_START, PROCEDURE_START, TRIGGER_START, PACKAGE_START, PACKAGE_BODY_START,
-                LOOP_START, FOR_START, IF_START, CASE_START, WHILE_START};
-
-        this.INDEX_2_START_SYMBOL = ImmutableMap.<Integer, PLStartSymbol>builder().put(0, PLStartSymbol.DECLARE)
-                .put(1, PLStartSymbol.BEGIN)
-                .put(2, PLStartSymbol.CREATE_FUNCTION)
-                .put(3, PLStartSymbol.CREATE_PROCEDURE)
-                .put(4, PLStartSymbol.CREATE_TRIGGER)
-                .put(5, PLStartSymbol.CREATE_PACKAGE)
-                .put(6, PLStartSymbol.CREATE_PACKAGE_BODY)
-                .put(7, PLStartSymbol.CREATE_TYPE)
-                .put(8, PLStartSymbol.CREATE_TYPE_BODY)
-                .put(9, PLStartSymbol.FUNCTION)
-                .put(10, PLStartSymbol.PROCEDURE)
-                .put(11, PLStartSymbol.TRIGGER)
-                .put(12, PLStartSymbol.PACKAGE)
-                .put(13, PLStartSymbol.PACKAGE_BODY)
-                .put(14, PLStartSymbol.LOOP)
-                .put(15, PLStartSymbol.FOR)
-                .put(16, PLStartSymbol.IF)
-                .put(17, PLStartSymbol.CASE)
-                .put(18, PLStartSymbol.WHILE).build();
+        List<int[]> plStartPatterns = new ArrayList<>();
+        ImmutableMap.Builder<Integer, PLStartSymbol> patternIndexBuilder = ImmutableMap.builder();
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, ANONYMOUS_BLOCK_DECLARE_START,
+                PLStartSymbol.DECLARE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, ANONYMOUS_BLOCK_BEGIN_START, PLStartSymbol.BEGIN);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_FUNCTION_START, PLStartSymbol.CREATE_FUNCTION);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PROCEDURE_START,
+                PLStartSymbol.CREATE_PROCEDURE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TRIGGER_START, PLStartSymbol.CREATE_TRIGGER);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PACKAGE_START, PLStartSymbol.CREATE_PACKAGE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PACKAGE_BODY_START,
+                PLStartSymbol.CREATE_PACKAGE_BODY);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TYPE_START, PLStartSymbol.CREATE_TYPE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TYPE_BODY_START,
+                PLStartSymbol.CREATE_TYPE_BODY);
+        if (this.db2Mode) {
+            addPlStartPattern(plStartPatterns, patternIndexBuilder,
+                    new int[] {definition.ALTER(), definition.FUNCTION()}, PLStartSymbol.CREATE_FUNCTION);
+            addPlStartPattern(plStartPatterns, patternIndexBuilder,
+                    new int[] {definition.ALTER(), definition.PROCEDURE()}, PLStartSymbol.CREATE_PROCEDURE);
+            addPlStartPattern(plStartPatterns, patternIndexBuilder,
+                    new int[] {definition.ALTER(), definition.TRIGGER()}, PLStartSymbol.CREATE_TRIGGER);
+        }
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, FUNCTION_START, PLStartSymbol.FUNCTION);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, PROCEDURE_START, PLStartSymbol.PROCEDURE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, TRIGGER_START, PLStartSymbol.TRIGGER);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, PACKAGE_START, PLStartSymbol.PACKAGE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, PACKAGE_BODY_START, PLStartSymbol.PACKAGE_BODY);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, LOOP_START, PLStartSymbol.LOOP);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, FOR_START, PLStartSymbol.FOR);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, new int[] {definition.REPEAT()},
+                PLStartSymbol.REPEAT);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, IF_START, PLStartSymbol.IF);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, CASE_START, PLStartSymbol.CASE);
+        addPlStartPattern(plStartPatterns, patternIndexBuilder, WHILE_START, PLStartSymbol.WHILE);
+        this.ALL_PL_START_PATTERNS = plStartPatterns.toArray(new int[0][]);
+        this.INDEX_2_START_SYMBOL = patternIndexBuilder.build();
 
         this.BLANK_OR_COMMENT_TYPES = definition.ANTLR_SKIP() > Token.MIN_USER_TOKEN_TYPE
                 ? new int[] {definition.SPACES(), definition.ANTLR_SKIP()}
                 : new int[] {definition.SPACES(), definition.SINGLE_LINE_COMMENT(),
-                        definition.MULTI_LINE_COMMENT()};
+                definition.MULTI_LINE_COMMENT()};
         this.PL_START_PATTERN_IGNORE_TYPES = new int[] {definition.OR(), definition.REPLACE(), definition.EDITIONABLE(),
                 definition.NONEDITIONABLE(), definition.BODY(), definition.AS(), definition.IS()};
 
@@ -270,6 +291,9 @@ public class SqlSplitter {
 
             String text = token.getText();
             int offset = token.getStartIndex();
+            if (db2Mode && type == tokenDefinition.SINGLE_LINE_COMMENT()) {
+                tryExecuteDb2Terminator(text);
+            }
             if (">".equals(text)) {
                 labelRightCount++;
             } else {
@@ -374,19 +398,28 @@ public class SqlSplitter {
     }
 
     public static SqlStatementIterator iterator(InputStream in, Charset charset, String delimiter) {
-        return iterator(in, charset, delimiter, true);
+        return iterator(PlSqlLexer.class, in, charset, delimiter, true);
     }
 
     public static SqlStatementIterator iterator(InputStream in, Charset charset, String delimiter,
-            boolean addDelimiter) {
-        return new SqlSplitterIterator(in, charset, delimiter, addDelimiter);
+                                                boolean addDelimiter) {
+        return iterator(PlSqlLexer.class, in, charset, delimiter, addDelimiter);
+    }
+
+    public static SqlStatementIterator iterator(Class<? extends Lexer> lexerType, InputStream in, Charset charset,
+                                                String delimiter, boolean addDelimiter) {
+        return new SqlSplitterIterator(lexerType, in, charset, delimiter, addDelimiter);
     }
 
     private void clear() {
         this.stmts.clear();
         this.cacheTokenTypes.clear();
+        this.plCacheTokenTypes.clear();
+        this.subPLStack.clear();
         this.currentStmtBuilder.setLength(0);
         this.state = State.SQL_STMT;
+        this.whileForLoopFlag = false;
+        this.currentOffset.setValue(0);
     }
 
     private int addStmtWhileStmtEnd(Token[] tokens, int pos) {
@@ -466,10 +499,39 @@ public class SqlSplitter {
             throw new IllegalArgumentException(
                     "Invalid delimiter command syntax, no delimiter value set");
         }
-        this.delimiterTokens = delimiterTokensToSet.toArray(new Token[0]);
-        this.delimiter = delimiterBuilder.toString();
-        cacheTokenTypes.clear();
+        setDelimiter(delimiterTokensToSet, delimiterBuilder.toString());
         return pos;
+    }
+
+    private void tryExecuteDb2Terminator(String commentText) {
+        if (!db2Mode || StringUtils.isBlank(commentText)) {
+            return;
+        }
+        Matcher matcher = DB2_TERMINATOR_PATTERN.matcher(commentText.trim());
+        if (!matcher.find()) {
+            return;
+        }
+        String newDelimiter = matcher.group(1);
+        setDelimiter(newDelimiter);
+    }
+
+    private void setDelimiter(List<Token> delimiterTokensToSet, String delimiterText) {
+        if (StringUtils.isBlank(delimiterText) || delimiterTokensToSet == null || delimiterTokensToSet.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Invalid delimiter command syntax, no delimiter value set");
+        }
+        this.delimiterTokens = delimiterTokensToSet.toArray(new Token[0]);
+        this.delimiter = delimiterText;
+        cacheTokenTypes.clear();
+    }
+
+    private void setDelimiter(String delimiterText) {
+        if (StringUtils.isBlank(delimiterText)) {
+            return;
+        }
+        this.delimiterTokens = innerUtils.extractDelimiterTokens(delimiterText);
+        this.delimiter = delimiterText;
+        cacheTokenTypes.clear();
     }
 
     private boolean isPLBlockStart() {
@@ -508,13 +570,28 @@ public class SqlSplitter {
         return false;
     }
 
+    private void addPlStartPattern(List<int[]> patterns, ImmutableMap.Builder<Integer, PLStartSymbol> builder,
+                                   int[] pattern, PLStartSymbol symbol) {
+        if (Objects.isNull(pattern) || pattern.length == 0) {
+            return;
+        }
+        for (int tokenType : pattern) {
+            if (tokenType <= Token.MIN_USER_TOKEN_TYPE) {
+                return;
+            }
+        }
+        builder.put(patterns.size(), symbol);
+        patterns.add(pattern);
+    }
+
     private void pushToStack(Collection<Integer> sourceCache) {
         PLStartSymbol currentSymbol = recognizeStartSymbol(sourceCache);
-        if (Objects.nonNull(currentSymbol)
+        if (!db2Mode && Objects.nonNull(currentSymbol)
                 && (currentSymbol == PLStartSymbol.WHILE || currentSymbol == PLStartSymbol.FOR)) {
             whileForLoopFlag = true;
         }
-        if (Objects.nonNull(currentSymbol) && whileForLoopFlag && currentSymbol == PLStartSymbol.LOOP) {
+        if (!db2Mode && Objects.nonNull(currentSymbol) && whileForLoopFlag
+                && currentSymbol == PLStartSymbol.LOOP) {
             whileForLoopFlag = false;
             return;
         }
@@ -627,9 +704,22 @@ public class SqlSplitter {
                 }
                 break;
             case FOR:
+                int forEndType = db2Mode ? this.tokenDefinition.FOR() : this.tokenDefinition.LOOP();
+                isEnd = matchPLBlockEnd(tokens, pos, forEndType);
+                posShift = isEnd ? 2 : 0;
+                break;
             case LOOP:
-            case WHILE:
                 isEnd = matchPLBlockEnd(tokens, pos, this.tokenDefinition.LOOP());
+                posShift = isEnd ? 2 : 0;
+                break;
+            case WHILE:
+                int whileEndType = db2Mode ? this.tokenDefinition.WHILE() : this.tokenDefinition.LOOP();
+                isEnd = matchPLBlockEnd(tokens, pos, whileEndType);
+                posShift = isEnd ? 2 : 0;
+                break;
+            case REPEAT:
+                int repeatEndType = db2Mode ? this.tokenDefinition.REPEAT() : this.tokenDefinition.LOOP();
+                isEnd = matchPLBlockEnd(tokens, pos, repeatEndType);
                 posShift = isEnd ? 2 : 0;
                 break;
             case IF:
@@ -725,6 +815,7 @@ public class SqlSplitter {
         IF,
         CASE,
         WHILE,
+        REPEAT,
         UNKNOWN
     }
 
@@ -865,6 +956,7 @@ public class SqlSplitter {
 
     private static class SqlSplitterIterator implements SqlStatementIterator {
 
+        private final Class<? extends Lexer> lexerType;
         private final BufferedReader reader;
         private final StringBuilder buffer = new StringBuilder();
         private final LinkedList<OffsetString> holder = new LinkedList<>();
@@ -882,7 +974,10 @@ public class SqlSplitter {
         private static final String SQL_MULTI_LINE_COMMENT_PREFIX = "/*";
         private static final Set<Character> DELIMITER_CHARACTERS = new HashSet<>(Arrays.asList(';', '/', '$'));
 
-        public SqlSplitterIterator(InputStream input, Charset charset, String delimiter, boolean addDelimiter) {
+        public SqlSplitterIterator(Class<? extends Lexer> lexerType, InputStream input, Charset charset,
+                                   String delimiter, boolean addDelimiter) {
+            PreConditions.notNull(lexerType, "lexerType");
+            this.lexerType = lexerType;
             this.reader = new BufferedReader(new InputStreamReader(input, charset));
             this.delimiter = delimiter;
             this.addDelimiter = addDelimiter;
@@ -985,7 +1080,7 @@ public class SqlSplitter {
         }
 
         private SqlSplitter createSplitter() {
-            return new SqlSplitter(PlSqlLexer.class, this.delimiter, addDelimiter);
+            return new SqlSplitter(lexerType, this.delimiter, addDelimiter);
         }
 
     }

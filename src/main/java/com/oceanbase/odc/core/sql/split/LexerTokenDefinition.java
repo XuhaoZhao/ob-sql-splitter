@@ -106,9 +106,14 @@ interface LexerTokenDefinition {
     int TYPE();
 
     /**
-     * TRIGGER 关键字
+     * TRIGGER �ؼ���
      */
     int TRIGGER();
+
+    /**
+     * ALTER �ؼ���
+     */
+    int ALTER();
 
     /**
      * BODY 关键字
@@ -132,9 +137,14 @@ interface LexerTokenDefinition {
     int LOOP();
 
     /**
-     * IF 关键字
+     * IF �ؼ���
      */
     int IF();
+
+    /**
+     * REPEAT �ؼ���
+     */
+    int REPEAT();
 
     /**
      * CASE 关键字

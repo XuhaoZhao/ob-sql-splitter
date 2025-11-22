@@ -112,6 +112,11 @@ class OBOraclePLLexerDefinition implements LexerTokenDefinition {
     }
 
     @Override
+    public int ALTER() {
+        return Token.MIN_USER_TOKEN_TYPE;
+    }
+
+    @Override
     public int BODY() {
         return PLLexer.BODY;
     }
@@ -144,6 +149,11 @@ class OBOraclePLLexerDefinition implements LexerTokenDefinition {
     @Override
     public int IF() {
         return PLLexer.IF;
+    }
+
+    @Override
+    public int REPEAT() {
+        return Token.MIN_USER_TOKEN_TYPE;
     }
 
     @Override
