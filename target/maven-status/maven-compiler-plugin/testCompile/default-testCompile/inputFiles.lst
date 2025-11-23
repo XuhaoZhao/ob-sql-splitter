@@ -1,6 +1,8 @@
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/OracleSqlSplitterTest.java
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/OBOracleSqlSplitterTest.java
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/SqlCommentProcessorTest.java
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/AbstractSqlSplitterTest.java
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/test/dataloader/DataLoaders.java
-/Users/zxh/projects/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/SqlSplitterIteratorTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/AbstractSqlSplitterTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/test/dataloader/DataLoaders.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/SqlSplitterIteratorTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/Db2SqlSplitterTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/OracleSqlSplitterTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/SqlCommentProcessorTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/OBOracleSqlSplitterTest.java
+/Users/zxh/code-repo/ob-sql-splitter/src/test/java/com/oceanbase/odc/core/sql/split/Db2YamlParseTest.java

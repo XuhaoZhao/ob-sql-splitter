@@ -1,0 +1,202 @@
+origin: |-
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE KERBEROS.PROMETHEUS'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (KERBEROS.EYK, KERBEROS.MAURA)'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE KERBEROS.PROMETHEUS PART 3 SORTDEVT SYSDA'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE "KERBEROS".PROMETHEUS'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX ("KERBEROS".EYK, KERBEROS."MAURA")'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE "KERBEROS"."PROMETHEUS" PART 3 SORTDEVT SYSDA'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE 'KERBEROS'.PROMETHEUS'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX ('KERBEROS'.EYK, KERBEROS.'MAURA')'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS' PART 3 SORTDEVT SYSDA'
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX
+       (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS'
+       PART 3
+       SHRLEVEL REFERENCE
+       SHRLEVEL CHANGE
+       DRAIN_WAIT 42
+       RETRY 2
+       RETRY_DELAY 5
+       SORTDEVT SYSDA
+       SORTNUM 7
+       PARALLEL 0
+      '
+    , ''
+    );
+
+  CALL SYSPROC.DSNUTILV(
+    'DBB.STUFF'
+    , 'NO'
+    , 'CHECK INDEX
+       (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS'
+       PART (3)
+       SHRLEVEL (REFERENCE)
+       SHRLEVEL (CHANGE)
+       DRAIN_WAIT (42)
+       RETRY (2)
+       RETRY_DELAY (5)
+       SORTDEVT (SYSDA)
+       SORTNUM (7)
+       PARALLEL (0)
+      '
+    , ''
+    );
+
+expected:
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE KERBEROS.PROMETHEUS'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (KERBEROS.EYK, KERBEROS.MAURA)'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE KERBEROS.PROMETHEUS PART 3 SORTDEVT SYSDA'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE "KERBEROS".PROMETHEUS'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX ("KERBEROS".EYK, KERBEROS."MAURA")'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE "KERBEROS"."PROMETHEUS" PART 3 SORTDEVT SYSDA'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE 'KERBEROS'.PROMETHEUS'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX ('KERBEROS'.EYK, KERBEROS.'MAURA')'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS' PART 3 SORTDEVT SYSDA'
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX
+         (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS'
+         PART 3
+         SHRLEVEL REFERENCE
+         SHRLEVEL CHANGE
+         DRAIN_WAIT 42
+         RETRY 2
+         RETRY_DELAY 5
+         SORTDEVT SYSDA
+         SORTNUM 7
+         PARALLEL 0
+        '
+      , ''
+      );
+  - |-
+    CALL SYSPROC.DSNUTILV(
+      'DBB.STUFF'
+      , 'NO'
+      , 'CHECK INDEX
+         (ALL) TABLESPACE 'KERBEROS'.'PROMETHEUS'
+         PART (3)
+         SHRLEVEL (REFERENCE)
+         SHRLEVEL (CHANGE)
+         DRAIN_WAIT (42)
+         RETRY (2)
+         RETRY_DELAY (5)
+         SORTDEVT (SYSDA)
+         SORTNUM (7)
+         PARALLEL (0)
+        '
+      , ''
+      );
+
+expected_end_delimiter: ;

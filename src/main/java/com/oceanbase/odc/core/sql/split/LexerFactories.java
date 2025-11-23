@@ -21,10 +21,12 @@ import com.oceanbase.odc.core.shared.PreConditions;
 import com.oceanbase.odc.core.shared.exception.UnsupportedException;
 import com.oceanbase.tools.sqlparser.oboracle.PLLexer;
 import com.oceanbase.tools.sqlparser.oracle.PlSqlLexer;
+import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
 
 public class LexerFactories {
     private static final LexerFactory OB_ORACLE_LEXER_FACTORY = new OBOraclePLLexerFactory();
     private static final LexerFactory ORACLE_LEXER_FACTORY = new OracleLexerFactory();
+    private static final LexerFactory DB2_LEXER_FACTORY = new Db2LexerFactory();
 
     public static LexerFactory of(Class<? extends Lexer> lexerType) {
         PreConditions.notNull(lexerType, "lexerType");
@@ -33,6 +35,9 @@ public class LexerFactories {
         }
         if (PlSqlLexer.class == lexerType) {
             return ORACLE_LEXER_FACTORY;
+        }
+        if (DB2zSQLLexer.class == lexerType) {
+            return DB2_LEXER_FACTORY;
         }
         throw new UnsupportedException("LexerType not supported, lexerType=" + lexerType.getName());
     }

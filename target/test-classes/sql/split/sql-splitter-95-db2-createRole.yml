@@ -1,0 +1,14 @@
+origin: |-
+  CREATE ROLE THE_GREAT_AND_POWERFUL_OZ;
+  CREATE ROLE EBCDIC_WIZARD;
+  CREATE ROLE ROLE;
+
+expected:
+  - |-
+    CREATE ROLE THE_GREAT_AND_POWERFUL_OZ;
+  - |-
+    CREATE ROLE EBCDIC_WIZARD;
+  - |-
+    CREATE ROLE ROLE;
+
+expected_end_delimiter: ;

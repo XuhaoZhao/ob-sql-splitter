@@ -1,8 +1,10 @@
 com/oceanbase/odc/common/util/YamlUtils.class
 com/oceanbase/odc/common/util/MapperUtils.class
+com/oceanbase/odc/core/sql/split/Db2SqlSplitter.class
 com/oceanbase/odc/common/util/StringUtils.class
 com/oceanbase/odc/core/sql/split/SqlCommentProcessor$SSC.class
 com/oceanbase/odc/common/util/MapperUtils$PathMatcher.class
+com/oceanbase/odc/core/sql/split/Db2LexerFactory.class
 com/oceanbase/odc/core/shared/PreConditions.class
 com/oceanbase/odc/core/sql/split/SqlCommentProcessor$OrderChar.class
 com/oceanbase/odc/core/sql/split/LexerTokenDefinitions.class
@@ -28,6 +30,7 @@ com/oceanbase/odc/core/sql/split/OBOraclePLLexerFactory.class
 com/oceanbase/odc/core/sql/split/OracleLexerDefinition.class
 com/oceanbase/odc/common/util/YamlUtils$2.class
 com/oceanbase/odc/core/sql/split/SqlSplitter$SubPLLevel.class
+com/oceanbase/odc/core/sql/split/Db2LexerDefinition.class
 com/oceanbase/odc/core/shared/Verify.class
 com/oceanbase/odc/core/sql/split/LexerFactories.class
 com/oceanbase/odc/core/sql/split/SqlSplitter$1.class

@@ -160,6 +160,11 @@ public class SqlSplitter {
 
     private String sql;
     private Boolean whileForLoopFlag = false;
+    // DB2: after a non-default delimiter terminates a statement, skip the standalone delimiter
+    // (and adjacent blanks) at the beginning of the next statement
+    private boolean db2SkipLeadingDelimiter = false;
+    // Marker to indicate stmt end was matched by current delimiter tokens (not default ';')
+    private boolean lastStmtEndedByDelimiterTokens = false;
 
     private Holder<Integer> currentOffset = new Holder<>(0);
 
@@ -294,6 +299,28 @@ public class SqlSplitter {
             if (db2Mode && type == tokenDefinition.SINGLE_LINE_COMMENT()) {
                 tryExecuteDb2Terminator(text);
             }
+            // DB2: if current statement is empty and the token equals current non-default delimiter
+            // (e.g. '!' or '@'), treat it as a pure terminator line and skip it.
+            if (db2Mode && StringUtils.isBlank(currentStmtBuilder.toString())
+                    && !DEFAULT_SQL_DELIMITER.equals(delimiter)
+                    && java.util.Objects.equals(text, delimiter)) {
+                continue;
+            }
+            // DB2: if a non-default delimiter (e.g. '!') appears as a standalone token
+            // immediately after a statement end, it should be treated as a pure terminator
+            // and must not be carried into the next statement.
+            if (db2Mode && db2SkipLeadingDelimiter) {
+                if (innerUtils.isBlankOrComment(type) && type != tokenDefinition.SINGLE_LINE_COMMENT()) {
+                    // drop leading blanks until we see a non-blank or delimiter
+                    continue;
+                }
+                if (java.util.Objects.equals(text, delimiter)) {
+                    // consume the delimiter token itself
+                    continue;
+                }
+                // first non-blank, non-delimiter token -> stop skipping
+                db2SkipLeadingDelimiter = false;
+            }
             if (">".equals(text)) {
                 labelRightCount++;
             } else {
@@ -338,7 +365,7 @@ public class SqlSplitter {
                     currentStmtBuilder.append(text);
                 }
             } else if (this.state == State.PL_STMT) {
-                // sql statement inside PL block end
+                // reset cache when encountering certain tokens inside PL
                 if (SQL_DELIMITER == type || PL_ELSE == type || PL_THEN == type || PL_RIGHTPAREN == type
                         || (labelRightCount == 2 && PL_GREATER_THAN_OP == type) || PL_LEFTPAREN == type) {
                     plCacheTokenTypes.clear();
@@ -361,20 +388,23 @@ public class SqlSplitter {
                     subPLStack.peek().matchMemberOrStatic = true;
                 }
 
+                // First, handle nested PL start/end so that statement-end can be checked with up-to-date state
+                if (isSubPLBlockStart()) {
+                    pushToStack(plCacheTokenTypes);
+                    plCacheTokenTypes.clear();
+                }
+                int posShift = isPLBlockEnd(tokens, pos);
+                if (posShift >= 0) {
+                    pos += posShift;
+                    subPLStack.pop();
+                    plCacheTokenTypes.clear();
+                }
+
+                // After possibly popping the PL stack, re-check whether current token ends the statement
                 if (isStmtEnd(tokens, pos)) {
                     pos = addStmtWhileStmtEnd(tokens, pos);
                     this.state = State.SQL_STMT;
                 } else {
-                    if (isSubPLBlockStart()) {
-                        pushToStack(plCacheTokenTypes);
-                        plCacheTokenTypes.clear();
-                    }
-                    int posShift = isPLBlockEnd(tokens, pos);
-                    if (posShift >= 0) {
-                        pos += posShift;
-                        subPLStack.pop();
-                        plCacheTokenTypes.clear();
-                    }
                     if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != tokenDefinition.SPACES()) {
                         currentOffset.setValue(offset);
                     }
@@ -440,13 +470,34 @@ public class SqlSplitter {
                 }
             }
             this.stmts.add(new OffsetString(currentOffset.getValue(), currentStmt.trim()));
+            if (db2Mode && (notDefaultSqlDelimiter || (!DEFAULT_SQL_DELIMITER.equals(delimiter)
+                    && lastStmtEndedByDelimiterTokens))) {
+                // for DB2, next statement may begin with the pure terminator token (e.g. '!')
+                // set a flag to skip it at the beginning of the next statement
+                db2SkipLeadingDelimiter = true;
+            }
+            lastStmtEndedByDelimiterTokens = false;
             if (notDefaultSqlDelimiter) {
                 this.currentOffset.setValue(this.currentOffset.getValue() + DEFAULT_SQL_DELIMITER.length());
             }
         }
         this.cacheTokenTypes.clear();
         this.currentStmtBuilder.setLength(0);
-        return pos + delimiterTokens.length - 1;
+        int skipLen = delimiterTokens.length;
+        if (db2Mode && !DEFAULT_SQL_DELIMITER.equals(delimiter)) {
+            int i = pos + skipLen;
+            // also skip following blanks/newlines after a non-default terminator (e.g. '!')
+            while (i < tokens.length) {
+                int tp = tokens[i].getType();
+                if (innerUtils.isBlankOrComment(tp) && tp != tokenDefinition.SINGLE_LINE_COMMENT()) {
+                    skipLen++;
+                    i++;
+                } else {
+                    break;
+                }
+            }
+        }
+        return pos + skipLen - 1;
     }
 
     private int executeDelimiterCommand(Token[] tokens, int pos) {
@@ -765,11 +816,17 @@ public class SqlSplitter {
 
         if (this.state == State.PL_STMT) {
             if (!DEFAULT_SQL_DELIMITER.equals(delimiter)) {
-                return matchDelimiterTokens(tokens, pos);
+                boolean match = matchDelimiterTokens(tokens, pos);
+                lastStmtEndedByDelimiterTokens = match;
+                return match;
             }
-            return tokens[pos].getType() == DEFAULT_PL_END_DELIMITER;
+            boolean match = tokens[pos].getType() == DEFAULT_PL_END_DELIMITER;
+            lastStmtEndedByDelimiterTokens = false;
+            return match;
         }
-        return matchDelimiterTokens(tokens, pos);
+        boolean match = matchDelimiterTokens(tokens, pos);
+        lastStmtEndedByDelimiterTokens = match;
+        return match;
     }
 
     private boolean matchDelimiterTokens(Token[] tokens, int pos) {
@@ -972,7 +1029,9 @@ public class SqlSplitter {
         private static final Character SQL_SEPARATOR_CHAR = '/';
         private static final Character LINE_SEPARATOR_CHAR = '\n';
         private static final String SQL_MULTI_LINE_COMMENT_PREFIX = "/*";
-        private static final Set<Character> DELIMITER_CHARACTERS = new HashSet<>(Arrays.asList(';', '/', '$'));
+        // Characters that may appear as statement separators at the start of the remaining buffer.
+        // Include DB2 alternate terminator '!' so it won't be carried into the next statement when using iterator.
+        private static final Set<Character> DELIMITER_CHARACTERS = new HashSet<>(Arrays.asList(';', '/', '$', '!'));
 
         public SqlSplitterIterator(Class<? extends Lexer> lexerType, InputStream input, Charset charset,
                                    String delimiter, boolean addDelimiter) {

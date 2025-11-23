@@ -1,0 +1,13 @@
+origin: |-
+  EXEC SQL COMMIT END-EXEC
+  COMMIT;
+  EXEC SQL COMMIT WORK END-EXEC.
+  COMMIT WORK;
+
+expected:
+  - EXEC SQL COMMIT END-EXEC
+  - COMMIT;
+  - EXEC SQL COMMIT WORK END-EXEC.
+  - COMMIT WORK;
+
+expected_end_delimiter: ;
