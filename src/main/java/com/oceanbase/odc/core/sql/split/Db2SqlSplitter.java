@@ -20,8 +20,6 @@ import java.nio.charset.Charset;
 
 import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
 
-import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
-
 public class Db2SqlSplitter extends SqlSplitter {
 
     public Db2SqlSplitter() {

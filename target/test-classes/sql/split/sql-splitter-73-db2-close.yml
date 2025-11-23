@@ -1,0 +1,7 @@
+origin: |-
+  EXEC SQL CLOSE C1 END-EXEC
+
+expected:
+  - EXEC SQL CLOSE C1 END-EXEC
+
+expected_end_delimiter:

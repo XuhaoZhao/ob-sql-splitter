@@ -26,8 +26,6 @@ import org.junit.Test;
 import com.oceanbase.odc.test.dataloader.DataLoaders;
 import com.oceanbase.odc.test.dataloader.DataLoaders.TestData;
 
-import lombok.Data;
-
 public abstract class AbstractSqlSplitterTest {
 
     protected abstract Class<? extends Lexer> lexerType();

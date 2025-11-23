@@ -1,0 +1,63 @@
+origin: |-
+  SELECT C1
+  FROM T1
+  WHERE C2 != 'X'
+  ;
+
+  SELECT C1
+  FROM T1
+  WHERE C2 !< 'X'
+  ;
+
+  SELECT C1
+  FROM T1
+  WHERE C2 !> 'X'
+  ;
+
+
+  --#SET TERMINATOR !
+
+  CREATE PROCEDURE TACHI.ROCINANTE.HOLDEN
+    DYNAMIC RESULT SETS 15
+    RETURN 7
+  ;
+  !
+
+  SELECT C1
+  FROM T1
+  WHERE C2 != 'X'
+  ;
+
+
+
+
+expected:
+  - |-
+    SELECT C1
+    FROM T1
+    WHERE C2 != 'X'
+    ;
+  - |-
+    SELECT C1
+    FROM T1
+    WHERE C2 !< 'X'
+    ;
+  - |-
+    SELECT C1
+    FROM T1
+    WHERE C2 !> 'X'
+    ;
+  - |-
+    --#SET TERMINATOR !
+
+    CREATE PROCEDURE TACHI.ROCINANTE.HOLDEN
+      DYNAMIC RESULT SETS 15
+      RETURN 7
+    ;
+  - |-
+    SELECT C1
+    FROM T1
+    WHERE C2 != 'X'
+    ;
+
+expected_end_delimiter: ;

@@ -26,22 +26,20 @@
 ### 基本用法
 
 ```java
-import com.oceanbase.odc.core.sql.split.SqlSplitter;
-import com.oceanbase.odc.core.sql.split.OffsetString;
-import com.oceanbase.tools.sqlparser.oracle.PlSqlLexer;
+
 
 // 创建SQL分割器
-SqlSplitter splitter = new SqlSplitter(PlSqlLexer.class);
+SqlSplitter splitter=new SqlSplitter(PlSqlLexer.class);
 
 // 分割SQL语句
-String sql = "CREATE PROCEDURE proc1 AS BEGIN NULL; END; / CREATE PROCEDURE proc2 AS BEGIN NULL; END; /";
-List<OffsetString> statements = splitter.split(sql);
+        String sql="CREATE PROCEDURE proc1 AS BEGIN NULL; END; / CREATE PROCEDURE proc2 AS BEGIN NULL; END; /";
+        List<OffsetString> statements=splitter.split(sql);
 
 // 输出分割结果
-for (OffsetString stmt : statements) {
-    System.out.println("SQL: " + stmt.getStr());
-    System.out.println("Offset: " + stmt.getOffset());
-}
+        for(OffsetString stmt:statements){
+        System.out.println("SQL: "+stmt.getStr());
+        System.out.println("Offset: "+stmt.getOffset());
+        }
 ```
 
 ### 使用自定义分隔符

@@ -36,8 +36,6 @@ import com.oceanbase.odc.test.dataloader.DataLoaders;
 import com.oceanbase.odc.test.dataloader.DataLoaders.TestData;
 import com.oceanbase.tools.sqlparser.oracle.PlSqlLexer;
 
-import lombok.Data;
-
 /**
  * @author gaoda.xy
  * @date 2023/11/28 19:06
