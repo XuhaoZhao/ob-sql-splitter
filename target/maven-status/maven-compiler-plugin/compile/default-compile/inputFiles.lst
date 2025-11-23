@@ -19,9 +19,12 @@
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/shared/exception/UnsupportedException.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/common/util/MapperUtils.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/shared/PreConditions.java
+/Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/sql/split/Db2StandaloneSqlSplitterxxx.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/sql/split/SqlSplitter.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/sql/split/SqlCommentProcessor.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/sql/split/Db2LexerDefinition.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/core/sql/split/LexerFactories.java
+/Users/zxh/code-repo/ob-sql-splitter/src/main/java/debug/PrintDb2Case.java
+/Users/zxh/code-repo/ob-sql-splitter/src/main/java/debug/PrintDb2Tokens.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/common/util/ResourceUtils.java
 /Users/zxh/code-repo/ob-sql-splitter/src/main/java/com/oceanbase/odc/common/util/StringUtils.java
