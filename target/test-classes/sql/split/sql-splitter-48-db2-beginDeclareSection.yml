@@ -1,7 +1,0 @@
-origin: |-
-  EXEC SQL BEGIN DECLARE SECTION END-EXEC.
-
-expected:
-  - EXEC SQL BEGIN DECLARE SECTION END-EXEC.
-
-expected_end_delimiter: ;

@@ -1,5 +1,0 @@
-origin: select 1 from dual;
-expected:
-  - select 1 from dual;
-
-expected_end_delimiter: ;
