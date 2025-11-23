@@ -1,8 +1,8 @@
 -------------------------------------------------------------------------------
 Test set: com.oceanbase.odc.core.sql.split.Db2SqlSplitterTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.333 sec <<< FAILURE!
-split_AllDb2YamlCases(com.oceanbase.odc.core.sql.split.Db2SqlSplitterTest)  Time elapsed: 1.297 sec  <<< FAILURE!
+Tests run: 5, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.513 sec <<< FAILURE!
+split_AllDb2YamlCases(com.oceanbase.odc.core.sql.split.Db2SqlSplitterTest)  Time elapsed: 0.406 sec  <<< FAILURE!
 arrays first differed at element [4]; expected:<[]SELECT C1
 FROM T1
 WH...> but was:<[!
@@ -37,8 +37,8 @@ WH...>
 	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
 	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
 	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:242)
-	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:137)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:252)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:141)
 	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:112)
 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)

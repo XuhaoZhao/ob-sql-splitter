@@ -227,4 +227,8 @@ class Db2LexerDefinition implements LexerTokenDefinition {
     public int WHILE() {
         return DB2zSQLLexer.WHILE;
     }
+
+    public int SET_STATEMENT_TERMINATOR(){
+        return DB2zSQLLexer.SET_STATEMENT_TERMINATOR;
+    }
 }
