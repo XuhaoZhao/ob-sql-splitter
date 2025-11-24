@@ -1,26 +1,37 @@
-import com.oceanbase.odc.core.sql.split.*;
+import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
+import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.Lexer;
+import org.antlr.v4.runtime.Token;
+
 import java.util.List;
 
-public class DebugTest {
+public class debug_test {
     public static void main(String[] args) {
-        String sql = "--#SET TERMINATOR !\n\nCREATE PROCEDURE TACHI.ROCINANTE.HOLDEN\n  DYNAMIC RESULT SETS 15\n  RETURN 7\n;\n!\nSELECT C1\nFROM T1\nWHERE C2 != 'X'\n;";
+        // Test single '!' character
+        System.out.println("=== Single '!' test ===");
+        testTokens("!");
 
-        System.out.println("=== Using Original SqlSplitter ===");
-        SqlSplitter originalSplitter = new SqlSplitter(com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer.class);
-        List<OffsetString> originalStmts = originalSplitter.split(sql);
-        for (int i = 0; i < originalStmts.size(); i++) {
-            System.out.println("--- Statement " + i + " ---");
-            System.out.println("'" + originalStmts.get(i).getStr() + "'");
-        }
-        System.out.println("Delimiter: " + originalSplitter.getDelimiter());
+        // Test '!' in SQL statement
+        System.out.println("\n=== '!' in SQL test ===");
+        testTokens("SELECT * FROM table1 WHERE col1 = 'value'!SELECT * FROM table2;");
+    }
 
-        System.out.println("\n=== Using Db2StandaloneSqlSplitter ===");
-        Db2StandaloneSqlSplitter standaloneSplitter = new Db2StandaloneSqlSplitter();
-        List<OffsetString> standaloneStmts = standaloneSplitter.split(sql);
-        for (int i = 0; i < standaloneStmts.size(); i++) {
-            System.out.println("--- Statement " + i + " ---");
-            System.out.println("'" + standaloneStmts.get(i).getStr() + "'");
+    private static void testTokens(String input) {
+        System.out.println("Input: " + input);
+
+        CharStream charStream = CharStreams.fromString(input);
+        Lexer lexer = new DB2zSQLLexer(charStream);
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        tokenStream.fill();
+
+        List<Token> tokens = tokenStream.getTokens();
+
+        for (int i = 0; i < tokens.size(); i++) {
+            Token token = tokens.get(i);
+            System.out.printf("Token[%d]: type=%d, text='%s', startIndex=%d, stopIndex=%d%n",
+                i, token.getType(), token.getText(), token.getStartIndex(), token.getStopIndex());
         }
-        System.out.println("Delimiter: " + standaloneSplitter.getDelimiter());
     }
 }

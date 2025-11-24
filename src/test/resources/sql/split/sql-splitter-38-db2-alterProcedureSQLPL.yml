@@ -106,4 +106,4 @@ expected:
       DBINFO
     ;
 
-expected_end_delimiter: @
+expected_end_delimiter: "@"

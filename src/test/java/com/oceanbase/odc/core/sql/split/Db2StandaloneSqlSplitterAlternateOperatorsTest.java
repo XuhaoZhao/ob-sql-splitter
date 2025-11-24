@@ -18,6 +18,7 @@ package com.oceanbase.odc.core.sql.split;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,11 +35,11 @@ public class Db2StandaloneSqlSplitterAlternateOperatorsTest {
     @Test
     public void split_Db2AlternateOperators() throws Exception {
         // Load the test data from the YAML file
-        String fileName = "src/test/resources/sql/split/sql-splitter-35-db2-alternateOperators.yml";
+        String fileName = "src/test/resources/sql/split/sql-splitter-49-db2-call.yml";
         TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
 
         // Create the standalone DB2 splitter
-        Db2StandaloneSqlSplitter sqlSplitter = new Db2StandaloneSqlSplitter();
+        Db2StandaloneSqlSplitterFixed sqlSplitter = new Db2StandaloneSqlSplitterFixed(DB2zSQLLexer.class);
 
         // Split the SQL
         List<String> actualStatements = sqlSplitter.split(testData.getOrigin()).stream()

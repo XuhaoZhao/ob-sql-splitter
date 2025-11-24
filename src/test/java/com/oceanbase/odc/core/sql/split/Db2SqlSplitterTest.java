@@ -22,6 +22,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.oceanbase.tools.sqlparser.oracle.PlSqlLexer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -52,7 +53,8 @@ public class Db2SqlSplitterTest {
                 .collect(Collectors.toList());
         for (Path p : cases) {
             try {
-                verifyByFileName(p.toString());
+
+                 verifyByFileName(p.toString());
             } catch (AssertionError ae) {
                 System.err.println("DB2 case failed: " + p);
                 throw ae;
@@ -67,7 +69,7 @@ public class Db2SqlSplitterTest {
     public void split_DebugSingleCase() throws IOException {
         // Debug helper: run single DB2 YAML to inspect actual outputs
         String fileName = "src/test/resources/sql/split/sql-splitter-29-db2-alterFunctionCompiledSqlScalar.yml";
-        TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
+        TestData testData = DataLoaders.yaml().fromFile(toResourcePath(fileName), TestData.class);
         SqlSplitter sqlSplitter = new SqlSplitter(DB2zSQLLexer.class);
         List<String> stmts = sqlSplitter.split(testData.getOrigin()).stream()
                 .map(OffsetString::getStr)
@@ -78,9 +80,16 @@ public class Db2SqlSplitterTest {
             System.out.println(stmts.get(i));
         }
     }
+    private String toResourcePath(String fileName) {
+        return fileName.replace("src/test/resources/", "")
+                      .replace("src\\test\\resources\\", "")
+                      .replace('\\', '/');
+    }
+
     private void verifyByFileName(String fileName) throws IOException {
-        TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
-        Db2StandaloneSqlSplitter sqlSplitter = new Db2StandaloneSqlSplitter();
+        String resourcePath = toResourcePath(fileName);
+        TestData testData = DataLoaders.yaml().fromFile(resourcePath, TestData.class);
+        Db2StandaloneSqlSplitterbbb sqlSplitter = new Db2StandaloneSqlSplitterbbb(DB2zSQLLexer.class);
         List<String> stmts = sqlSplitter.split(testData.getOrigin()).stream()
                 .map(OffsetString::getStr)
                 .map(Db2SqlSplitterTest::normalize)
@@ -95,7 +104,7 @@ public class Db2SqlSplitterTest {
     @Test
     public void split_DebugInlineSqlScalar() throws IOException {
         String fileName = "src/test/resources/sql/split/sql-splitter-31-db2-alterFunctionInlineSqlScalar.yml";
-        TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
+        TestData testData = DataLoaders.yaml().fromFile(toResourcePath(fileName), TestData.class);
         System.out.println("Expected count=" + testData.getExpected().size());
         for (int i = 0; i < testData.getExpected().size(); i++) {
             System.out.println("-- expected " + i + " --\n" + testData.getExpected().get(i));
@@ -118,7 +127,7 @@ public class Db2SqlSplitterTest {
     @Test
     public void split_DebugAlternateOperators() throws IOException {
         String fileName = "src/test/resources/sql/split/sql-splitter-35-db2-alternateOperators.yml";
-        TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
+        TestData testData = DataLoaders.yaml().fromFile(toResourcePath(fileName), TestData.class);
         SqlSplitter sqlSplitter = new SqlSplitter(DB2zSQLLexer.class);
         List<String> stmts = sqlSplitter.split(testData.getOrigin()).stream()
                 .map(OffsetString::getStr)

@@ -15,13 +15,13 @@ origin: |-
   ;
 
 
-  --#SET TERMINATOR !
+  --#SET TERMINATOR k
 
   CREATE PROCEDURE TACHI.ROCINANTE.HOLDEN
     DYNAMIC RESULT SETS 15
     RETURN 7
   ;
-  !
+  k
 
   SELECT C1
   FROM T1
@@ -48,7 +48,7 @@ expected:
     WHERE C2 !> 'X'
     ;
   - |-
-    --#SET TERMINATOR !
+    --#SET TERMINATOR k
 
     CREATE PROCEDURE TACHI.ROCINANTE.HOLDEN
       DYNAMIC RESULT SETS 15
@@ -60,4 +60,4 @@ expected:
     WHERE C2 != 'X'
     ;
 
-expected_end_delimiter: ;
+expected_end_delimiter: k

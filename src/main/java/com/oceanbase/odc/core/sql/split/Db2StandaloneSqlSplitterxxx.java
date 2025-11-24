@@ -266,6 +266,15 @@ public class Db2StandaloneSqlSplitterxxx {
             }
 
             String text = token.getText();
+            if(text.contains("FOR")){
+                System.out.println("haha");
+            }
+            if(text.contains("DECIMAL")){
+                System.out.println("haha");
+            }
+            if(text.equals(";")){
+                System.out.println("fvve");
+            }
             int offset = token.getStartIndex();
             if (type == ((Db2LexerDefinition)this.tokenDefinition).SET_STATEMENT_TERMINATOR()) {
                 tryExecuteDb2Terminator(text);

@@ -31,9 +31,11 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Stack;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 
 import com.oceanbase.tools.sqlparser.obdb2.DB2zSQLLexer;
 import org.antlr.v4.runtime.CharStream;
@@ -51,6 +53,7 @@ import com.oceanbase.odc.core.shared.PreConditions;
 import com.oceanbase.odc.core.shared.Verify;
 import com.oceanbase.odc.core.shared.exception.UnsupportedException;
 import com.oceanbase.odc.core.sql.split.SqlCommentProcessor.OrderChar;
+import com.oceanbase.tools.sqlparser.oracle.PlSqlLexer;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -61,18 +64,14 @@ import lombok.extern.slf4j.Slf4j;
  * without dependencies on Oracle-specific logic.
  */
 @Slf4j
-public class Db2StandaloneSqlSplitter {
+public class Db2StandaloneSqlSplitterFixed {
 
     private static final int MAX_PL_PATTEN_TYPE_SIZE = 3;
     private static final String DEFAULT_SQL_DELIMITER = ";";
     private static final char[] SPACES_CHARS = "\r\n\t ".toCharArray();
-    private static final Pattern DB2_TERMINATOR_PATTERN =
-            Pattern.compile("--\\s*#SET\\s+TERMINATOR\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE);
-
     private final LexerTokenDefinition tokenDefinition;
     private final LexerFactory lexerFactory;
-    private final DB2InnerUtils innerUtils;
-
+    private final Db2StandaloneSqlSplitterFixed.InnerUtils innerUtils;
     private final int DEFAULT_PL_END_DELIMITER;
     private final int SQL_DELIMITER;
     private final int PL_ELSE;
@@ -122,7 +121,10 @@ public class Db2StandaloneSqlSplitter {
     /**
      * 当前语句状态，初始为 SQL_STMT，进去 PL BLock 后切换到 PL_STMT 状态
      */
-    private State state = State.SQL_STMT;
+    private Db2StandaloneSqlSplitterFixed.State state = Db2StandaloneSqlSplitterFixed.State.SQL_STMT;
+
+    private static final Pattern DB2_TERMINATOR_PATTERN =
+            Pattern.compile("--\\s*#SET\\s+TERMINATOR\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE);
 
     /**
      * 当前拆句关键字，初始为连接会话的 delimiter，拆词结束后回写到连接会话的 delimiter
@@ -158,102 +160,95 @@ public class Db2StandaloneSqlSplitter {
     private Map<Integer, PLStartSymbol> INDEX_2_START_SYMBOL;
 
     private String sql;
-    // DB2: after a non-default delimiter terminates a statement, skip the standalone delimiter
-    // (and adjacent blanks) at the beginning of the next statement
-    private boolean db2SkipLeadingDelimiter = false;
-    // Marker to indicate stmt end was matched by current delimiter tokens (not default ';')
-    private boolean lastStmtEndedByDelimiterTokens = false;
+    private Boolean whileForLoopFlag = false;
 
     private Holder<Integer> currentOffset = new Holder<>(0);
 
-    public Db2StandaloneSqlSplitter() {
-        this(DEFAULT_SQL_DELIMITER);
+
+    public Db2StandaloneSqlSplitterFixed(Class<? extends Lexer> lexerType) {
+        this(lexerType, DEFAULT_SQL_DELIMITER);
     }
 
-    public Db2StandaloneSqlSplitter(String delimiter) {
-        this(delimiter, true);
+    public Db2StandaloneSqlSplitterFixed(Class<? extends Lexer> lexerType, String delimiter) {
+        this(lexerType, delimiter, true);
     }
 
-    public Db2StandaloneSqlSplitter(String delimiter, boolean addDelimiter) {
+    public Db2StandaloneSqlSplitterFixed(Class<? extends Lexer> lexerType, String delimiter, boolean addDelimiter) {
+        PreConditions.notNull(lexerType, "lexerType");
+        this.tokenDefinition = LexerTokenDefinitions.of(lexerType);
+        this.lexerFactory = LexerFactories.of(lexerType);
+        this.innerUtils = new Db2StandaloneSqlSplitterFixed.InnerUtils();
         this.delimiter = delimiter;
         this.addDelimiter = addDelimiter;
-        this.tokenDefinition = new Db2LexerDefinition();
-        this.lexerFactory = LexerFactories.of(DB2zSQLLexer.class);
-        this.innerUtils = new DB2InnerUtils();
 
-        this.DEFAULT_PL_END_DELIMITER = this.tokenDefinition.SEMICOLON();
-        this.SQL_DELIMITER = this.tokenDefinition.SEMICOLON();
-        this.PL_ELSE = this.tokenDefinition.ELSE();
-        this.PL_THEN = this.tokenDefinition.THEN();
-        this.PL_RIGHTPAREN = this.tokenDefinition.RIGHTBRACKET();
-        this.PL_LEFTPAREN = this.tokenDefinition.LEFTBRACKET();
-        this.PL_GREATER_THAN_OP = this.tokenDefinition.GREATER_THAN_OP();
+        LexerTokenDefinition definition = this.tokenDefinition;
+        this.DEFAULT_PL_END_DELIMITER = definition.DIV();
+        this.SQL_DELIMITER = definition.SEMICOLON();
+        this.PL_ELSE = definition.ELSE();
+        this.PL_THEN = definition.THEN();
+        this.PL_RIGHTPAREN = definition.RIGHTBRACKET();
+        this.PL_LEFTPAREN = definition.LEFTBRACKET();
+        this.PL_GREATER_THAN_OP = definition.GREATER_THAN_OP();
 
-        int[] ANONYMOUS_BLOCK_DECLARE_START = new int[] {this.tokenDefinition.DECLARE()};
-        int[] ANONYMOUS_BLOCK_BEGIN_START = new int[] {this.tokenDefinition.BEGIN()};
-        int[] CREATE_FUNCTION_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.FUNCTION()};
-        int[] CREATE_PROCEDURE_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.PROCEDURE()};
-        int[] CREATE_TRIGGER_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.TRIGGER()};
-        int[] CREATE_PACKAGE_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.PACKAGE()};
-        int[] CREATE_PACKAGE_BODY_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.PACKAGE(), this.tokenDefinition.BODY()};
-        int[] CREATE_TYPE_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.TYPE()};
-        int[] CREATE_TYPE_BODY_START = new int[] {this.tokenDefinition.CREATE(), this.tokenDefinition.TYPE(), this.tokenDefinition.BODY()};
+        int[] ANONYMOUS_BLOCK_DECLARE_START = new int[] {definition.DECLARE()};
+        int[] ANONYMOUS_BLOCK_BEGIN_START = new int[] {definition.BEGIN()};
+        int[] CREATE_FUNCTION_START = new int[] {definition.CREATE(), definition.FUNCTION()};
+        int[] CREATE_PROCEDURE_START = new int[] {definition.CREATE(), definition.PROCEDURE()};
+        int[] CREATE_TRIGGER_START = new int[] {definition.CREATE(), definition.TRIGGER()};
+        int[] CREATE_PACKAGE_START = new int[] {definition.CREATE(), definition.PACKAGE()};
+        int[] CREATE_PACKAGE_BODY_START = new int[] {definition.CREATE(), definition.PACKAGE(), definition.BODY()};
+        int[] CREATE_TYPE_START = new int[] {definition.CREATE(), definition.TYPE()};
+        int[] CREATE_TYPE_BODY_START = new int[] {definition.CREATE(), definition.TYPE(), definition.BODY()};
 
-        int[] FUNCTION_START = new int[] {this.tokenDefinition.FUNCTION()};
-        int[] PROCEDURE_START = new int[] {this.tokenDefinition.PROCEDURE()};
-        int[] TRIGGER_START = new int[] {this.tokenDefinition.TRIGGER()};
-        int[] PACKAGE_START = new int[] {this.tokenDefinition.PACKAGE()};
-        int[] PACKAGE_BODY_START = new int[] {this.tokenDefinition.PACKAGE(), this.tokenDefinition.BODY()};
-        int[] LOOP_START = new int[] {this.tokenDefinition.LOOP()};
-        int[] FOR_START = new int[] {this.tokenDefinition.FOR()};
-        int[] IF_START = new int[] {this.tokenDefinition.IF()};
-        int[] CASE_START = new int[] {this.tokenDefinition.CASE()};
-        int[] WHILE_START = new int[] {this.tokenDefinition.WHILE()};
+        int[] FUNCTION_START = new int[] {definition.FUNCTION()};
+        int[] PROCEDURE_START = new int[] {definition.PROCEDURE()};
+        int[] TRIGGER_START = new int[] {definition.TRIGGER()};
+        int[] PACKAGE_START = new int[] {definition.PACKAGE()};
+        int[] PACKAGE_BODY_START = new int[] {definition.PACKAGE(), definition.BODY()};
+        int[] LOOP_START = new int[] {definition.LOOP()};
+        int[] FOR_START = new int[] {definition.FOR()};
+        int[] IF_START = new int[] {definition.IF()};
+        int[] CASE_START = new int[] {definition.CASE()};
+        int[] WHILE_START = new int[] {definition.WHILE()};
+        int[] EXEC_SQL = new int[] {DB2zSQLLexer.EXEC_SQL};
+        int[] END_EXEC = new int[] {DB2zSQLLexer.END_EXEC};
 
-        List<int[]> plStartPatterns = new ArrayList<>();
-        ImmutableMap.Builder<Integer, PLStartSymbol> patternIndexBuilder = ImmutableMap.builder();
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, ANONYMOUS_BLOCK_DECLARE_START,
-                PLStartSymbol.DECLARE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, ANONYMOUS_BLOCK_BEGIN_START, PLStartSymbol.BEGIN);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_FUNCTION_START, PLStartSymbol.CREATE_FUNCTION);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PROCEDURE_START,
-                PLStartSymbol.CREATE_PROCEDURE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TRIGGER_START, PLStartSymbol.CREATE_TRIGGER);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PACKAGE_START, PLStartSymbol.CREATE_PACKAGE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_PACKAGE_BODY_START,
-                PLStartSymbol.CREATE_PACKAGE_BODY);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TYPE_START, PLStartSymbol.CREATE_TYPE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CREATE_TYPE_BODY_START,
-                PLStartSymbol.CREATE_TYPE_BODY);
+        this.ALL_PL_START_PATTERNS = new int[][] {ANONYMOUS_BLOCK_DECLARE_START, ANONYMOUS_BLOCK_BEGIN_START,
+                CREATE_FUNCTION_START, CREATE_PROCEDURE_START, CREATE_TRIGGER_START, CREATE_PACKAGE_START,
+                CREATE_PACKAGE_BODY_START, CREATE_TYPE_START, CREATE_TYPE_BODY_START,
+                FUNCTION_START, PROCEDURE_START, TRIGGER_START, PACKAGE_START, PACKAGE_BODY_START,
+                LOOP_START, FOR_START, IF_START, CASE_START, WHILE_START, EXEC_SQL};
 
-        addPlStartPattern(plStartPatterns, patternIndexBuilder,
-                new int[] {this.tokenDefinition.ALTER(), this.tokenDefinition.FUNCTION()}, PLStartSymbol.CREATE_FUNCTION);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder,
-                new int[] {this.tokenDefinition.ALTER(), this.tokenDefinition.PROCEDURE()}, PLStartSymbol.CREATE_PROCEDURE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder,
-                new int[] {this.tokenDefinition.ALTER(), this.tokenDefinition.TRIGGER()}, PLStartSymbol.CREATE_TRIGGER);
+        this.INDEX_2_START_SYMBOL = ImmutableMap.<Integer, PLStartSymbol>builder().put(0, PLStartSymbol.DECLARE)
+                .put(1, PLStartSymbol.BEGIN)
+                .put(2, PLStartSymbol.CREATE_FUNCTION)
+                .put(3, PLStartSymbol.CREATE_PROCEDURE)
+                .put(4, PLStartSymbol.CREATE_TRIGGER)
+                .put(5, PLStartSymbol.CREATE_PACKAGE)
+                .put(6, PLStartSymbol.CREATE_PACKAGE_BODY)
+                .put(7, PLStartSymbol.CREATE_TYPE)
+                .put(8, PLStartSymbol.CREATE_TYPE_BODY)
+                .put(9, PLStartSymbol.FUNCTION)
+                .put(10, PLStartSymbol.PROCEDURE)
+                .put(11, PLStartSymbol.TRIGGER)
+                .put(12, PLStartSymbol.PACKAGE)
+                .put(13, PLStartSymbol.PACKAGE_BODY)
+                .put(14, PLStartSymbol.LOOP)
+                .put(15, PLStartSymbol.FOR)
+                .put(16, PLStartSymbol.IF)
+                .put(17, PLStartSymbol.CASE)
+                .put(18, PLStartSymbol.WHILE)
+                .put(19, PLStartSymbol.EXEC_SQL).build();
 
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, FUNCTION_START, PLStartSymbol.FUNCTION);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, PROCEDURE_START, PLStartSymbol.PROCEDURE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, TRIGGER_START, PLStartSymbol.TRIGGER);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, PACKAGE_START, PLStartSymbol.PACKAGE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, PACKAGE_BODY_START, PLStartSymbol.PACKAGE_BODY);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, LOOP_START, PLStartSymbol.LOOP);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, FOR_START, PLStartSymbol.FOR);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, new int[] {this.tokenDefinition.REPEAT()},
-                PLStartSymbol.REPEAT);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, IF_START, PLStartSymbol.IF);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, CASE_START, PLStartSymbol.CASE);
-        addPlStartPattern(plStartPatterns, patternIndexBuilder, WHILE_START, PLStartSymbol.WHILE);
-        this.ALL_PL_START_PATTERNS = plStartPatterns.toArray(new int[0][]);
-        this.INDEX_2_START_SYMBOL = patternIndexBuilder.build();
+        this.BLANK_OR_COMMENT_TYPES = definition.ANTLR_SKIP() > Token.MIN_USER_TOKEN_TYPE
+                ? new int[] {definition.SPACES(), definition.ANTLR_SKIP()}
+                : new int[] {definition.SPACES(), definition.SINGLE_LINE_COMMENT(),
+                definition.MULTI_LINE_COMMENT(),DB2zSQLLexer.NEWLINE};
+        this.PL_START_PATTERN_IGNORE_TYPES = new int[] {definition.OR(), definition.REPLACE(), definition.EDITIONABLE(),
+                definition.NONEDITIONABLE(), definition.BODY(), definition.AS(), definition.IS()};
 
-        this.BLANK_OR_COMMENT_TYPES = new int[] {this.tokenDefinition.SPACES(), this.tokenDefinition.SINGLE_LINE_COMMENT(),
-                this.tokenDefinition.MULTI_LINE_COMMENT(),DB2zSQLLexer.NEWLINE};
-        this.PL_START_PATTERN_IGNORE_TYPES = new int[] {this.tokenDefinition.OR(), this.tokenDefinition.REPLACE(),
-                this.tokenDefinition.BODY(), this.tokenDefinition.AS(), this.tokenDefinition.IS()};
-
-        this.PL_IDENT_TYPES = new int[] {this.tokenDefinition.IDENT()};
+        this.PL_IDENT_TYPES = definition.IDENT() > Token.MIN_USER_TOKEN_TYPE ? new int[] {definition.IDENT()}
+                : new int[] {definition.REGULAR_ID(), definition.DELIMITED_ID()};
 
         this.delimiterTokens = innerUtils.extractDelimiterTokens(delimiter);
     }
@@ -285,41 +280,7 @@ public class Db2StandaloneSqlSplitter {
             }
 
             String text = token.getText();
-            if(text.contains("FOR")){
-                System.out.println("haha");
-            }
-            if(text.contains("DECIMAL")){
-                System.out.println("haha");
-            }
-            if(text.equals(";")){
-                System.out.println("fvve");
-            }
             int offset = token.getStartIndex();
-            if (type == ((Db2LexerDefinition)this.tokenDefinition).SET_STATEMENT_TERMINATOR()) {
-                tryExecuteDb2Terminator(text);
-            }
-//            // DB2: if current statement is empty and the token equals current non-default delimiter
-//            // (e.g. '!' or '@'), treat it as a pure terminator line and skip it.
-//            if (StringUtils.isBlank(currentStmtBuilder.toString())
-//                    && !DEFAULT_SQL_DELIMITER.equals(delimiter)
-//                    && java.util.Objects.equals(text, delimiter)) {
-//                continue;
-//            }
-//            // DB2: if a non-default delimiter (e.g. '!') appears as a standalone token
-//            // immediately after a statement end, it should be treated as a pure terminator
-//            // and must not be carried into the next statement.
-//            if (db2SkipLeadingDelimiter) {
-//                if (innerUtils.isBlankOrComment(type) && type != this.tokenDefinition.SINGLE_LINE_COMMENT()) {
-//                    // drop leading blanks until we see a non-blank or delimiter
-//                    continue;
-//                }
-//                if (java.util.Objects.equals(text, delimiter)) {
-//                    // consume the delimiter token itself
-//                    continue;
-//                }
-//                // first non-blank, non-delimiter token -> stop skipping
-//                db2SkipLeadingDelimiter = false;
-//            }
             if (">".equals(text)) {
                 labelRightCount++;
             } else {
@@ -331,7 +292,7 @@ public class Db2StandaloneSqlSplitter {
                 continue;
             }
             if (innerUtils.isPLStartPatternIgnoreTypes(type)) {
-                if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != this.tokenDefinition.SPACES()) {
+                if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != tokenDefinition.SPACES()) {
                     currentOffset.setValue(offset);
                 }
                 // skip analysis blank, comment and other PL block start math pattern ignore types
@@ -339,7 +300,7 @@ public class Db2StandaloneSqlSplitter {
                 continue;
             }
 
-            if (this.state == State.SQL_STMT) {
+            if (this.state == Db2StandaloneSqlSplitterFixed.State.SQL_STMT) {
                 if (cacheTokenTypes.size() < MAX_PL_PATTEN_TYPE_SIZE) {
                     cacheTokenTypes.add(type);
                 }
@@ -347,24 +308,28 @@ public class Db2StandaloneSqlSplitter {
                     pos = executeDelimiterCommand(tokens, pos);
                     continue;
                 }
-                if (isPLBlockStart()) {
+                if(type == ((Db2LexerDefinition)this.tokenDefinition).SET_STATEMENT_TERMINATOR()){
+                    tryExecuteDb2Terminator(text);
+                }
+
+                 if (isPLBlockStart()) {
                     pushToStack(cacheTokenTypes);
-                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != this.tokenDefinition.SPACES()) {
+                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != tokenDefinition.SPACES()) {
                         currentOffset.setValue(offset);
                     }
                     currentStmtBuilder.append(text);
-                    this.state = State.PL_STMT;
+                    this.state = Db2StandaloneSqlSplitterFixed.State.PL_STMT;
                     cacheTokenTypes.clear();
                 } else if (isStmtEnd(tokens, pos)) {
                     pos = addStmtWhileStmtEnd(tokens, pos);
                 } else {
-                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != this.tokenDefinition.SPACES()) {
+                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != tokenDefinition.SPACES()) {
                         currentOffset.setValue(offset);
                     }
                     currentStmtBuilder.append(text);
                 }
-            } else if (this.state == State.PL_STMT) {
-                // reset cache when encountering certain tokens inside PL
+            } else if (this.state == Db2StandaloneSqlSplitterFixed.State.PL_STMT) {
+                // sql statement inside PL block end
                 if (SQL_DELIMITER == type || PL_ELSE == type || PL_THEN == type || PL_RIGHTPAREN == type
                         || (labelRightCount == 2 && PL_GREATER_THAN_OP == type) || PL_LEFTPAREN == type) {
                     plCacheTokenTypes.clear();
@@ -372,14 +337,14 @@ public class Db2StandaloneSqlSplitter {
                 } else if (plCacheTokenTypes.size() < MAX_PL_PATTEN_TYPE_SIZE) {
                     plCacheTokenTypes.add(type);
                 }
-                if (!subPLStack.empty() && (type == this.tokenDefinition.EXTERNAL() || type == this.tokenDefinition.LANGUAGE())) {
+                if (!subPLStack.empty() && (type == tokenDefinition.EXTERNAL() || type == tokenDefinition.LANGUAGE())) {
                     subPLStack.peek().matchExternalOrLanguage = true;
-                } else if (!subPLStack.empty() && (type == this.tokenDefinition.IS() || type == this.tokenDefinition.AS())) {
+                } else if (!subPLStack.empty() && (type == tokenDefinition.IS() || type == tokenDefinition.AS())) {
                     // `IS` may run into case like `cursor cur1 is select col from for_loop_cursor_t;`
                     // in this case, it does not have parent pl block
                     subPLStack.peek().matchIsOrAs = true;
                 } else if (!subPLStack.empty() && subPLStack.peek().startSymbol == PLStartSymbol.CREATE_TYPE
-                        && (type == this.tokenDefinition.MEMBER() || type == this.tokenDefinition.STATIC())) {
+                        && (type == tokenDefinition.MEMBER() || type == tokenDefinition.STATIC())) {
                     // temporarily set matchMemberOrStatic in parent subPLLevel
                     // when encounters sub Function / Procedure in create type
                     // set sub Function / Procedure's matchMemberOrStatic
@@ -387,24 +352,21 @@ public class Db2StandaloneSqlSplitter {
                     subPLStack.peek().matchMemberOrStatic = true;
                 }
 
-                // First, handle nested PL start/end so that statement-end can be checked with up-to-date state
-                if (isSubPLBlockStart()) {
-                    pushToStack(plCacheTokenTypes);
-                    plCacheTokenTypes.clear();
-                }
-                int posShift = isPLBlockEnd(tokens, pos);
-                if (posShift >= 0) {
-                    pos += posShift;
-                    subPLStack.pop();
-                    plCacheTokenTypes.clear();
-                }
-
-                // After possibly popping the PL stack, re-check whether current token ends the statement
                 if (isStmtEnd(tokens, pos)) {
                     pos = addStmtWhileStmtEnd(tokens, pos);
                     this.state = State.SQL_STMT;
                 } else {
-                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != this.tokenDefinition.SPACES()) {
+                    if (isSubPLBlockStart()) {
+                        pushToStack(plCacheTokenTypes);
+                        plCacheTokenTypes.clear();
+                    }
+                    int posShift = isPLBlockEnd(tokens, pos);
+                    if (posShift >= 0) {
+                        pos += posShift;
+                        subPLStack.pop();
+                        plCacheTokenTypes.clear();
+                    }
+                    if (StringUtils.isBlank(currentStmtBuilder.toString()) && type != tokenDefinition.SPACES()) {
                         currentOffset.setValue(offset);
                     }
                     currentStmtBuilder.append(text);
@@ -413,7 +375,7 @@ public class Db2StandaloneSqlSplitter {
                     if (posShift > 0) {
                         for (int index = 1; index <= posShift; index++) {
                             if (StringUtils.isBlank(currentStmtBuilder.toString())
-                                    && type != this.tokenDefinition.SPACES()) {
+                                    && type != tokenDefinition.SPACES()) {
                                 currentOffset.setValue(offset);
                             }
                             currentStmtBuilder.append(tokens[pos - posShift + index].getText());
@@ -425,24 +387,34 @@ public class Db2StandaloneSqlSplitter {
         addStmtWhileStmtEnd(tokens, tokenCount);
         return stmts;
     }
-
-    public static SqlStatementIterator iterator(InputStream input, Charset charset, String delimiter) {
-        return iterator(input, charset, delimiter, true);
+    private void tryExecuteDb2Terminator(String commentText) {
+        if (StringUtils.isBlank(commentText)) {
+            return;
+        }
+        Matcher matcher = DB2_TERMINATOR_PATTERN.matcher(commentText.trim());
+        if (!matcher.find()) {
+            return;
+        }
+        String newDelimiter = matcher.group(1);
+        CommonToken delimiterToken = new CommonToken(DB2zSQLLexer.SQL_STATEMENT_TERMINATOR, newDelimiter);
+        this.delimiterTokens = new Token[]{delimiterToken};
+        this.delimiter = newDelimiter;
+        cacheTokenTypes.clear();
+    }
+    public static SqlStatementIterator iterator(InputStream in, Charset charset, String delimiter) {
+        return iterator(in, charset, delimiter, true);
     }
 
-    public static SqlStatementIterator iterator(InputStream input, Charset charset, String delimiter,
-            boolean addDelimiter) {
-        return new Db2SqlSplitterIterator(input, charset, delimiter, addDelimiter);
+    public static SqlStatementIterator iterator(InputStream in, Charset charset, String delimiter,
+                                                boolean addDelimiter) {
+        return new SqlSplitterIterator(in, charset, delimiter, addDelimiter);
     }
 
     private void clear() {
         this.stmts.clear();
         this.cacheTokenTypes.clear();
-        this.plCacheTokenTypes.clear();
-        this.subPLStack.clear();
         this.currentStmtBuilder.setLength(0);
         this.state = State.SQL_STMT;
-        this.currentOffset.setValue(0);
     }
 
     private int addStmtWhileStmtEnd(Token[] tokens, int pos) {
@@ -463,34 +435,13 @@ public class Db2StandaloneSqlSplitter {
                 }
             }
             this.stmts.add(new OffsetString(currentOffset.getValue(), currentStmt.trim()));
-            if (notDefaultSqlDelimiter || (!DEFAULT_SQL_DELIMITER.equals(delimiter)
-                    && lastStmtEndedByDelimiterTokens)) {
-                // for DB2, next statement may begin with the pure terminator token (e.g. '!')
-                // set a flag to skip it at the beginning of the next statement
-                db2SkipLeadingDelimiter = true;
-            }
-            lastStmtEndedByDelimiterTokens = false;
             if (notDefaultSqlDelimiter) {
                 this.currentOffset.setValue(this.currentOffset.getValue() + DEFAULT_SQL_DELIMITER.length());
             }
         }
         this.cacheTokenTypes.clear();
         this.currentStmtBuilder.setLength(0);
-        int skipLen = delimiterTokens.length;
-        if (!DEFAULT_SQL_DELIMITER.equals(delimiter)) {
-            int i = pos + skipLen;
-            // also skip following blanks/newlines after a non-default terminator (e.g. '!')
-            while (i < tokens.length) {
-                int tp = tokens[i].getType();
-                if (innerUtils.isBlankOrComment(tp) && tp != this.tokenDefinition.SINGLE_LINE_COMMENT()) {
-                    skipLen++;
-                    i++;
-                } else {
-                    break;
-                }
-            }
-        }
-        return pos + skipLen - 1;
+        return pos + delimiterTokens.length - 1;
     }
 
     private int executeDelimiterCommand(Token[] tokens, int pos) {
@@ -504,7 +455,7 @@ public class Db2StandaloneSqlSplitter {
         }
         pos++;
         Token expectBlank = tokens[pos];
-        if (expectBlank.getType() != this.tokenDefinition.SPACES()) {
+        if (expectBlank.getType() != tokenDefinition.SPACES()) {
             throw new IllegalArgumentException(
                     "Invalid delimiter command syntax, expect blank after 'delimiter'");
         }
@@ -516,7 +467,7 @@ public class Db2StandaloneSqlSplitter {
         while (++pos < tokens.length) {
             Token delimiterToken = tokens[pos];
             int delimiterTokenType = delimiterToken.getType();
-            if (delimiterTokenType > Token.MIN_USER_TOKEN_TYPE && delimiterTokenType != this.tokenDefinition.SPACES()) {
+            if (delimiterTokenType > Token.MIN_USER_TOKEN_TYPE && delimiterTokenType != tokenDefinition.SPACES()) {
                 hasDelimiterValue = true;
                 break;
             }
@@ -532,7 +483,7 @@ public class Db2StandaloneSqlSplitter {
         while (++pos < tokens.length) {
             Token delimiterToken = tokens[pos];
             int delimiterTokenType = delimiterToken.getType();
-            if (delimiterTokenType > Token.MIN_USER_TOKEN_TYPE && delimiterTokenType != this.tokenDefinition.SPACES()) {
+            if (delimiterTokenType > Token.MIN_USER_TOKEN_TYPE && delimiterTokenType != tokenDefinition.SPACES()) {
                 delimiterTokensToSet.add(delimiterToken);
                 delimiterBuilder.append(delimiterToken.getText());
             } else {
@@ -543,40 +494,10 @@ public class Db2StandaloneSqlSplitter {
             throw new IllegalArgumentException(
                     "Invalid delimiter command syntax, no delimiter value set");
         }
-        setDelimiter(delimiterTokensToSet, delimiterBuilder.toString());
-        return pos;
-    }
-
-    private void tryExecuteDb2Terminator(String commentText) {
-        if (StringUtils.isBlank(commentText)) {
-            return;
-        }
-        Matcher matcher = DB2_TERMINATOR_PATTERN.matcher(commentText.trim());
-        if (!matcher.find()) {
-            return;
-        }
-        String newDelimiter = matcher.group(1);
-        setDelimiter(newDelimiter);
-    }
-
-    private void setDelimiter(List<Token> delimiterTokensToSet, String delimiterText) {
-        if (StringUtils.isBlank(delimiterText) || delimiterTokensToSet == null || delimiterTokensToSet.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Invalid delimiter command syntax, no delimiter value set");
-        }
         this.delimiterTokens = delimiterTokensToSet.toArray(new Token[0]);
-        this.delimiter = delimiterText;
+        this.delimiter = delimiterBuilder.toString();
         cacheTokenTypes.clear();
-    }
-
-    private void setDelimiter(String delimiterText) {
-        if (StringUtils.isBlank(delimiterText)) {
-            return;
-        }
-        CommonToken delimiterToken = new CommonToken(DB2zSQLLexer.SQL_STATEMENT_TERMINATOR, delimiterText);
-        this.delimiterTokens = new Token[]{delimiterToken};
-        this.delimiter = delimiterText;
-        cacheTokenTypes.clear();
+        return pos;
     }
 
     private boolean isPLBlockStart() {
@@ -615,22 +536,16 @@ public class Db2StandaloneSqlSplitter {
         return false;
     }
 
-    private void addPlStartPattern(List<int[]> patterns, ImmutableMap.Builder<Integer, PLStartSymbol> builder,
-                                   int[] pattern, PLStartSymbol symbol) {
-        if (Objects.isNull(pattern) || pattern.length == 0) {
-            return;
-        }
-        for (int tokenType : pattern) {
-            if (tokenType <= Token.MIN_USER_TOKEN_TYPE) {
-                return;
-            }
-        }
-        builder.put(patterns.size(), symbol);
-        patterns.add(pattern);
-    }
-
     private void pushToStack(Collection<Integer> sourceCache) {
         PLStartSymbol currentSymbol = recognizeStartSymbol(sourceCache);
+        if (Objects.nonNull(currentSymbol)
+                && (currentSymbol == PLStartSymbol.WHILE || currentSymbol == PLStartSymbol.FOR)) {
+            whileForLoopFlag = true;
+        }
+        if (Objects.nonNull(currentSymbol) && whileForLoopFlag && currentSymbol == PLStartSymbol.LOOP) {
+            whileForLoopFlag = false;
+            return;
+        }
         // declare does not need to push into stack
         // because declare ... begin ... end block can be recognized by begin ... end
         // declare does not have an explicit ending
@@ -740,22 +655,9 @@ public class Db2StandaloneSqlSplitter {
                 }
                 break;
             case FOR:
-                int forEndType = this.tokenDefinition.FOR();
-                isEnd = matchPLBlockEnd(tokens, pos, forEndType);
-                posShift = isEnd ? 2 : 0;
-                break;
             case LOOP:
-                isEnd = matchPLBlockEnd(tokens, pos, this.tokenDefinition.LOOP());
-                posShift = isEnd ? 2 : 0;
-                break;
             case WHILE:
-                int whileEndType = this.tokenDefinition.WHILE();
-                isEnd = matchPLBlockEnd(tokens, pos, whileEndType);
-                posShift = isEnd ? 2 : 0;
-                break;
-            case REPEAT:
-                int repeatEndType = this.tokenDefinition.REPEAT();
-                isEnd = matchPLBlockEnd(tokens, pos, repeatEndType);
+                isEnd = matchPLBlockEnd(tokens, pos, this.tokenDefinition.LOOP());
                 posShift = isEnd ? 2 : 0;
                 break;
             case IF:
@@ -765,6 +667,9 @@ public class Db2StandaloneSqlSplitter {
             case CASE:
                 isEnd = matchPLBlockEnd(tokens, pos, this.tokenDefinition.CASE());
                 posShift = isEnd ? 2 : 0;
+                break;
+            case EXEC_SQL:
+                isEnd = tokens[pos].getType() == DB2zSQLLexer.END_EXEC;
                 break;
             case UNKNOWN:
             default:
@@ -795,35 +700,25 @@ public class Db2StandaloneSqlSplitter {
         if (pos >= tokens.length) {
             return false;
         }
+
         if (!subPLStack.empty()) {
             return false;
         }
 
         if (this.state == State.PL_STMT) {
             if (!DEFAULT_SQL_DELIMITER.equals(delimiter)) {
-                boolean match = matchDelimiterTokens(tokens, pos);
-                lastStmtEndedByDelimiterTokens = match;
-                return match;
+                return matchDelimiterTokens(tokens, pos);
             }
-            boolean match = tokens[pos].getType() == DEFAULT_PL_END_DELIMITER;
-            lastStmtEndedByDelimiterTokens = false;
-            return match;
+            return tokens[pos].getType() == DEFAULT_PL_END_DELIMITER;
         }
-        boolean match = matchDelimiterTokens(tokens, pos);
-        lastStmtEndedByDelimiterTokens = match;
-        return match;
+        return matchDelimiterTokens(tokens, pos);
     }
 
     private boolean matchDelimiterTokens(Token[] tokens, int pos) {
-        // DB2 note:
-        // In DB2, a user-specified terminator (e.g. '!' or '@') is the real statement terminator
-        // for CREATE FUNCTION/PROCEDURE/TRIGGER/... statements that contain inner ';'.
-        // Unlike Oracle's SQL*Plus-style '/', we must NOT fall back to ';' while still inside
-        // a PL block. Doing so would cause the splitter to miss the non-default terminator at
-        // the end of a CREATE statement and either carry the terminator into the PL text or
-        // fail to end the statement at the right place.
-        // Therefore, always use the current `delimiterTokens` even when we are inside PL.
         Token[] dt = delimiterTokens;
+        if (this.state == State.PL_STMT && !subPLStack.empty()) {
+            dt = innerUtils.extractDelimiterTokens(DEFAULT_SQL_DELIMITER);
+        }
         int delimiterLength = dt.length;
         int tokensLength = tokens.length;
         if (pos + delimiterLength > tokensLength) {
@@ -862,7 +757,7 @@ public class Db2StandaloneSqlSplitter {
         IF,
         CASE,
         WHILE,
-        REPEAT,
+        EXEC_SQL,
         UNKNOWN
     }
 
@@ -887,19 +782,19 @@ public class Db2StandaloneSqlSplitter {
         }
     }
 
-    class DB2InnerUtils {
+    class InnerUtils {
         Token[] initTokens(String sql) {
             return tokens(sql).toArray(new Token[0]);
         }
 
         Token[] extractDelimiterTokens(String delimiter) {
-            return tokensWithoutEOF(delimiter).stream()
+            return tokens(delimiter).stream()
                     .filter(token -> token.getType() > Token.MIN_USER_TOKEN_TYPE)
                     .toArray(Token[]::new);
         }
 
         /**
-         * DB2 词法文件识别 IDENT 关键字必须是字母开头，对于形如 delimiter $$ 语句，其中的 $$ 会被认为是错误的词法，<br>
+         * Oracle 词法文件识别 IDENT 关键字必须是字母开头，对于形如 delimiter $$ 语句，其中的 $$ 会被认为是错误的词法，<br>
          * 这里对不识别的词法转换为 IDENT 和 SPACES 类型的 Token，使得上层可以一致化处理
          */
         private List<Token> tokens(String sql) {
@@ -927,18 +822,6 @@ public class Db2StandaloneSqlSplitter {
                 allTokens.addAll(generateInvalidTokens(sql, lastToken.getStopIndex() + 1, length));
             }
             return allTokens;
-        }
-
-        /**
-         * 生成不包含EOF字符的tokens，适用于只需要处理实际输入字符的场景
-         */
-        public List<Token> tokensWithoutEOF(String sql) {
-            List<Token> allTokens = tokens(sql);
-
-            // 移除EOF token (type == -1)
-            return allTokens.stream()
-                    .filter(token -> !isEOF(token.getType()))
-                    .collect(Collectors.toList());
         }
 
         private List<Token> generateInvalidTokens(String sql, int start, int end) {
@@ -1010,9 +893,10 @@ public class Db2StandaloneSqlSplitter {
         private boolean isIdent(int tokenType) {
             return ArrayUtils.contains(PL_IDENT_TYPES, tokenType);
         }
+
     }
 
-    private static class Db2SqlSplitterIterator implements SqlStatementIterator {
+    private static class SqlSplitterIterator implements SqlStatementIterator {
 
         private final BufferedReader reader;
         private final StringBuilder buffer = new StringBuilder();
@@ -1029,11 +913,9 @@ public class Db2StandaloneSqlSplitter {
         private static final Character SQL_SEPARATOR_CHAR = '/';
         private static final Character LINE_SEPARATOR_CHAR = '\n';
         private static final String SQL_MULTI_LINE_COMMENT_PREFIX = "/*";
-        // Characters that may appear as statement separators at the start of the remaining buffer.
-        // Include DB2 alternate terminator '!' so it won't be carried into the next statement when using iterator.
-        private static final Set<Character> DELIMITER_CHARACTERS = new HashSet<>(Arrays.asList(';', '/', '$', '!'));
+        private static final Set<Character> DELIMITER_CHARACTERS = new HashSet<>(Arrays.asList(';', '/', '$'));
 
-        public Db2SqlSplitterIterator(InputStream input, Charset charset, String delimiter, boolean addDelimiter) {
+        public SqlSplitterIterator(InputStream input, Charset charset, String delimiter, boolean addDelimiter) {
             this.reader = new BufferedReader(new InputStreamReader(input, charset));
             this.delimiter = delimiter;
             this.addDelimiter = addDelimiter;
@@ -1086,8 +968,8 @@ public class Db2StandaloneSqlSplitter {
                         processor.addLineOracle(innerHolder, innerBuffer, bufferOrder,
                                 line.chars().mapToObj(c -> new OrderChar((char) c, -1)).collect(Collectors.toList()));
                     }
-                    // Db2StandaloneSqlSplitter is non-reentrant, so we need to create a new one for each loop
-                    Db2StandaloneSqlSplitter splitter = createSplitter();
+                    // SqlSplitter is non-reentrant, so we need to create a new one for each loop
+                    Db2StandaloneSqlSplitterFixed splitter = createSplitter();
                     this.sqls = splitter.split(this.buffer.toString()).stream().map(OffsetString::getStr)
                             .collect(Collectors.toList());
                     while (this.sqls.size() > 1) {
@@ -1135,8 +1017,10 @@ public class Db2StandaloneSqlSplitter {
             }
         }
 
-        private Db2StandaloneSqlSplitter createSplitter() {
-            return new Db2StandaloneSqlSplitter(this.delimiter, addDelimiter);
+        private Db2StandaloneSqlSplitterFixed createSplitter() {
+            return new Db2StandaloneSqlSplitterFixed(DB2zSQLLexer.class, this.delimiter, addDelimiter);
         }
+
     }
+
 }
