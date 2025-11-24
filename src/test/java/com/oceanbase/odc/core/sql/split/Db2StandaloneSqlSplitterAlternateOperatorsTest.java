@@ -35,11 +35,11 @@ public class Db2StandaloneSqlSplitterAlternateOperatorsTest {
     @Test
     public void split_Db2AlternateOperators() throws Exception {
         // Load the test data from the YAML file
-        String fileName = "src/test/resources/sql/split/sql-splitter-49-db2-call.yml";
+        String fileName = "src/test/resources/sql/split/sql-splitter-82-db2-createFunctionCompiledSqlScalar.yml";
         TestData testData = DataLoaders.yaml().fromFile(fileName.replace("src/test/resources/", ""), TestData.class);
 
         // Create the standalone DB2 splitter
-        Db2StandaloneSqlSplitterFixed sqlSplitter = new Db2StandaloneSqlSplitterFixed(DB2zSQLLexer.class);
+        Db2StandaloneSqlSplitterbbb sqlSplitter = new Db2StandaloneSqlSplitterbbb(DB2zSQLLexer.class);
 
         // Split the SQL
         List<String> actualStatements = sqlSplitter.split(testData.getOrigin()).stream()

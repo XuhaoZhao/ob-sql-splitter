@@ -28,17 +28,20 @@ expected:
     INTO :HV1
     FROM L1.S1.T1
     WHERE C3 = 'XYZ'
+    ;
   - |-
     SELECT
         COVARIANCE(C1, C2)
     INTO :HV1
     FROM L1.S1.T1
     WHERE C3 = 'XYZ'
+    ;
   - |-
     SELECT
         COVAR(C1, C2)
     INTO :HV1
     FROM L1.S1.T1
     WHERE C3 = 'XYZ'
+    ;
 
 expected_end_delimiter: ;
