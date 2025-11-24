@@ -206,7 +206,6 @@ public class Db2StandaloneSqlSplitterbbb {
         int[] PACKAGE_START = new int[] {definition.PACKAGE()};
         int[] PACKAGE_BODY_START = new int[] {definition.PACKAGE(), definition.BODY()};
         int[] LOOP_START = new int[] {definition.LOOP()};
-        int[] FOR_START = new int[] {definition.FOR()};
         int[] IF_START = new int[] {definition.IF()};
         int[] CASE_START = new int[] {definition.CASE()};
         int[] WHILE_START = new int[] {definition.WHILE()};
@@ -217,7 +216,7 @@ public class Db2StandaloneSqlSplitterbbb {
                 CREATE_FUNCTION_START, CREATE_PROCEDURE_START, CREATE_TRIGGER_START, CREATE_PACKAGE_START,
                 CREATE_PACKAGE_BODY_START, CREATE_TYPE_START, CREATE_TYPE_BODY_START,
                 FUNCTION_START, PROCEDURE_START, TRIGGER_START, PACKAGE_START, PACKAGE_BODY_START,
-                LOOP_START, FOR_START, IF_START, CASE_START, WHILE_START};
+                LOOP_START, IF_START, CASE_START, WHILE_START};
 
         this.INDEX_2_START_SYMBOL = ImmutableMap.<Integer, PLStartSymbol>builder().put(0, PLStartSymbol.DECLARE)
                 .put(1, PLStartSymbol.BEGIN)
@@ -234,7 +233,6 @@ public class Db2StandaloneSqlSplitterbbb {
                 .put(12, PLStartSymbol.PACKAGE)
                 .put(13, PLStartSymbol.PACKAGE_BODY)
                 .put(14, PLStartSymbol.LOOP)
-                .put(15, PLStartSymbol.FOR)
                 .put(16, PLStartSymbol.IF)
                 .put(17, PLStartSymbol.CASE)
                 .put(18, PLStartSymbol.WHILE).build();
@@ -537,7 +535,7 @@ public class Db2StandaloneSqlSplitterbbb {
     private void pushToStack(Collection<Integer> sourceCache) {
         PLStartSymbol currentSymbol = recognizeStartSymbol(sourceCache);
         if (Objects.nonNull(currentSymbol)
-                && (currentSymbol == PLStartSymbol.WHILE || currentSymbol == PLStartSymbol.FOR)) {
+                && (currentSymbol == PLStartSymbol.WHILE)) {
             whileForLoopFlag = true;
         }
         if (Objects.nonNull(currentSymbol) && whileForLoopFlag && currentSymbol == PLStartSymbol.LOOP) {
@@ -652,7 +650,7 @@ public class Db2StandaloneSqlSplitterbbb {
                     isEnd = tokens[pos].getType() == this.tokenDefinition.END();
                 }
                 break;
-            case FOR:
+//            case FOR:
             case LOOP:
             case WHILE:
                 isEnd = matchPLBlockEnd(tokens, pos, this.tokenDefinition.LOOP());
@@ -746,7 +744,7 @@ public class Db2StandaloneSqlSplitterbbb {
         TRIGGER,
         PACKAGE,
         PACKAGE_BODY,
-        FOR,
+//        FOR,
         LOOP,
         IF,
         CASE,
